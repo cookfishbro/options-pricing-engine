@@ -2,13 +2,14 @@
 
 A from-scratch derivatives-pricing library spanning the classical Black-Scholes
 benchmark through stochastic-volatility, jump-diffusion, exotic, and American
-options. The organising theme is **cross-validation**: every method is checked
+options — **calibrated to and validated on real S&P 500 (SPY) option market
+data**. The organising theme is **cross-validation**: every method is checked
 against an independent one (Fourier vs. Monte Carlo, lattice vs. closed form,
 simulation vs. analytic control variate).
 
 A companion academic paper, [**"Beyond Black-Scholes"**](paper/paper.pdf)
-([LaTeX source](paper/paper.tex)), writes up the models, methods, and numerical
-results.
+([LaTeX source](paper/paper.tex)), writes up the models, methods, and the
+empirical calibration to SPY options.
 
 ## What's implemented
 
@@ -29,53 +30,53 @@ results.
 - **Barrier** options (knock-in/out), validated by in-out parity
 - Floating-strike **lookback** options
 
-**Applications**
+**Real market data & calibration**
+- `data/fetch_data.py` pulls a live SPY option chain from Yahoo Finance, implies
+  the forward per expiry from put-call parity, and writes a clean snapshot
 - **Implied volatility** solver (Newton-Raphson with Brent fallback)
-- **Volatility smile / surface** construction
-- **Heston calibration** to a market volatility surface (least squares)
+- **Volatility smile / surface** construction from real quotes
+- **Heston *and* Merton calibration** to the real SPY surface (vega-weighted least squares)
 
-## Key results
+## Key results (real SPY options, as of 2026-06-26, spot $728.99)
 
-Every method agrees with an independent benchmark:
+Calibrated to **903 liquid quotes across 6 maturities**, both models reproduce the
+market skew that Black-Scholes cannot:
+
+| Model | Calibrated highlights | Vol RMSE |
+|---|---|---|
+| Heston | ρ = −0.71 (leverage skew), ξ = 1.48 | **0.60%** |
+| Merton | λ = 0.85/yr, μ_J = −0.13 (crash jumps) | **1.22%** |
+
+Cross-validation on the real ATM SPY contract (S=729, T=0.23, ATM IV=16.7%) — every method agrees with an independent one:
 
 | Contract | Method A | Method B |
 |---|---|---|
-| European ATM call | Black-Scholes 10.4506 | QMC 10.4505 / Tree 10.4466 / MC 10.4661±0.013 |
-| Heston call | Fourier 10.155 | Monte Carlo 10.198±0.025 |
-| Merton call | Series 11.662 | Monte Carlo 11.678±0.017 |
-| American put | Lattice 6.090 | Longstaff-Schwartz 6.082±0.023 |
-| Barrier (in+out) | Monte Carlo 10.440 | Vanilla 10.451 |
+| European call | Black-Scholes 28.334 | QMC 28.333 / Tree 28.322 / MC 28.338±0.038 |
+| Heston call | Fourier 28.545 | Monte Carlo 28.732±0.067 |
+| Merton call | Series 27.990 | Monte Carlo 27.996±0.045 |
+| American put | Lattice 19.500 | Longstaff-Schwartz 19.505±0.077 |
 
-**The volatility smile** — the central qualitative result. Black-Scholes is flat
-by construction; Heston (ρ = −0.7) produces a skew and Merton's jumps produce a
-smile, matching what's observed in real markets:
+**The real SPY volatility skew** — the central empirical fact, one curve per expiry:
 
-![Volatility smile](results/vol_smile.png)
+![Market smile](results/market_smile.png)
+
+**Heston & Merton calibrated to the real skew** (Heston vol-RMSE 0.60%):
+
+![Calibration fit](results/calibration_fit_real.png)
 
 **Quasi-Monte Carlo** improves the convergence rate from `O(n⁻¹/²)` to ~`O(n⁻¹)`:
 
 ![QMC convergence](results/qmc_convergence.png)
 
-**Heston calibration** recovers the generating parameters from a synthetic
-surface to under two volatility basis points RMSE:
-
-![Calibration fit](results/calibration_fit.png)
-
-**The mechanism behind the smile** — the risk-neutral return distributions show
-Heston's negative skew and Merton's fat tails relative to the Gaussian benchmark:
-
-![Return distributions](results/return_distributions.png)
-
-(See `results/` for the binomial convergence, MC variance reduction, Heston
-surface, Greeks profiles, American exercise boundary, and smile-sensitivity plots
-as well.)
+(See `results/` for the calibrated-Heston surface, return distributions, Greeks
+profiles, American exercise boundary, smile-sensitivity, and convergence plots.)
 
 ## Project structure
 
 ```
 options_pricing/
   black_scholes.py     # closed-form price + Greeks
-  binomial_tree.py      # CRR tree, European & American
+  binomial_tree.py      # CRR tree (Euro/American) + exercise boundary
   monte_carlo.py         # GBM MC, antithetic + control variate
   quasi_mc.py             # Sobol quasi-Monte Carlo
   implied_vol.py           # Newton-Raphson + Brent fallback
@@ -85,16 +86,20 @@ options_pricing/
   exotics.py                   # Asian, barrier, lookback
   american_mc.py                # Longstaff-Schwartz LSM
   vol_surface.py                 # implied-vol smile/surface
-  calibration.py                  # Heston calibration
-tests/                              # 31 cross-validation tests
+  calibration.py                  # Heston & Merton calibration
+data/
+  fetch_data.py          # pull a live SPY chain from Yahoo Finance
+  options.csv             # committed real-data snapshot
+  meta.json                # snapshot metadata (spot, rate, forwards)
+tests/                       # 36 cross-validation tests
 demo/
-  run_demo.py            # benchmark: convergence + variance-reduction plots
-  advanced_demo.py        # smile, surface, QMC, calibration, distributions,
-                          # Greeks, exercise-boundary, sensitivity plots
+  real_data_demo.py      # load data, calibrate, real-data figures + summary
+  run_demo.py             # benchmark convergence/variance-reduction (real contract)
+  advanced_demo.py         # surface, distributions, Greeks, boundary, sensitivity
 paper/
   paper.tex               # academic write-up (LaTeX source)
   paper.pdf                # compiled paper
-results/                    # generated figures
+results/                    # generated figures + real_summary.json
 ```
 
 ## Setup
@@ -108,7 +113,7 @@ pip install -r requirements.txt
 ```python
 from options_pricing import (
     bs_price, heston_price, merton_price,
-    asian_mc_price, longstaff_schwartz_price, calibrate_heston,
+    asian_mc_price, longstaff_schwartz_price, calibrate_heston, calibrate_merton,
 )
 
 # Black-Scholes
@@ -119,17 +124,21 @@ hest = heston_price(S0=100, K=100, T=1, r=0.05,
                     v0=0.04, kappa=2.0, theta=0.04, sigma=0.5, rho=-0.7,
                     option_type="call")
 
-# Merton jump-diffusion (closed-form series)
-mert = merton_price(S=100, K=100, T=1, r=0.05, sigma=0.2,
-                    lam=0.5, muJ=-0.1, sigmaJ=0.15, option_type="call")
-
-# Arithmetic Asian with geometric control variate
-asian, se = asian_mc_price(S0=100, K=100, T=1, r=0.05, sigma=0.2, n_fixings=50)
-
-# American put via Longstaff-Schwartz
-am_put, se = longstaff_schwartz_price(S0=100, K=100, T=1, r=0.05, sigma=0.2,
-                                      option_type="put")
+# Calibrate Heston to market quotes: (K, T, price, type) or (K, T, price, type, r, q)
+result = calibrate_heston(quotes, S0=728.99)   # -> {v0, kappa, theta, sigma, rho, rmse, ...}
 ```
+
+## Reproducing the real-data study
+
+```bash
+python data/fetch_data.py        # refresh the SPY snapshot (optional; one is committed)
+python demo/real_data_demo.py     # calibrate + market_smile / calibration_fit figures
+python demo/run_demo.py            # benchmark convergence figures (real contract)
+python demo/advanced_demo.py        # surface, distributions, Greeks, boundary, sensitivity
+```
+
+`real_data_demo.py` writes `results/real_summary.json`, which the other two demos
+read so every figure is based on the same real, calibrated parameters.
 
 ## Tests
 
@@ -137,16 +146,10 @@ am_put, se = longstaff_schwartz_price(S0=100, K=100, T=1, r=0.05, sigma=0.2,
 pytest -v
 ```
 
-31 tests covering put-call parity, lattice/Fourier/series/MC cross-agreement,
-variance-reduction efficiency, QMC convergence, in-out barrier parity, and
-round-trip Heston calibration.
-
-## Reproducing the figures
-
-```bash
-python demo/run_demo.py        # benchmark figures
-python demo/advanced_demo.py    # smile, surface, QMC, calibration
-```
+36 tests covering put-call parity, lattice/Fourier/series/MC cross-agreement,
+variance-reduction efficiency, QMC convergence, in-out barrier parity, terminal
+martingale checks, the American exercise boundary, and Heston/Merton calibration.
+(Tests use deterministic synthetic data — no network required.)
 
 ## Building the paper
 

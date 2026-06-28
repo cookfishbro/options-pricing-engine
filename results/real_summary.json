@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "ticker": "SPY",
+    "asof": "2026-06-26",
+    "spot": 728.99,
+    "risk_free_rate_irx": 0.03663,
+    "trailing_dividend_yield": 0.007711,
+    "n_quotes": 903,
+    "n_expiries": 6,
+    "expiries": [
+      "2026-07-17",
+      "2026-07-31",
+      "2026-08-21",
+      "2026-09-18",
+      "2026-09-30",
+      "2026-10-30"
+    ],
+    "forward_and_implied_carry": {
+      "2026-07-17": {
+        "forward_dividend": 730.2,
+        "forward_parity": 734.3,
+        "q_implied": -0.08944
+      },
+      "2026-07-31": {
+        "forward_dividend": 731.01,
+        "forward_parity": 735.46,
+        "q_implied": -0.05557
+      },
+      "2026-08-21": {
+        "forward_dividend": 732.23,
+        "forward_parity": 737.18,
+        "q_implied": -0.03623
+      },
+      "2026-09-18": {
+        "forward_dividend": 733.86,
+        "forward_parity": 738.75,
+        "q_implied": -0.02116
+      },
+      "2026-09-30": {
+        "forward_dividend": 734.56,
+        "forward_parity": 738.9,
+        "q_implied": -0.0147
+      },
+      "2026-10-30": {
+        "forward_dividend": 736.3,
+        "forward_parity": 741.13,
+        "q_implied": -0.0112
+      }
+    },
+    "source": "Yahoo Finance (yfinance)",
+    "fetched_utc": "2026-06-28T15:09:00.598391Z"
+  },
+  "heston": {
+    "v0": 0.02587876820161872,
+    "kappa": 8.889939820340688,
+    "theta": 0.041623237233417695,
+    "sigma": 1.4765271664756567,
+    "rho": -0.7085706087599436,
+    "rmse": 0.0053505810236122095,
+    "feller_satisfied": false,
+    "vol_rmse": 0.006044969302723316
+  },
+  "merton": {
+    "sigma": 0.11077071331174095,
+    "lam": 0.8524458903646625,
+    "muJ": -0.13036624961583804,
+    "sigmaJ": 0.08452717052752463,
+    "rmse": 0.01265341928312998,
+    "vol_rmse": 0.012189392564500455
+  },
+  "cross_validation": {
+    "contract": {
+      "ticker": "SPY",
+      "S0": 728.99,
+      "K": 729.0,
+      "T": 0.2301,
+      "r": 0.03663,
+      "q": -0.021163,
+      "atm_iv": 0.1665,
+      "expiry": "2026-09-18"
+    },
+    "european_call": {
+      "black_scholes": 28.3337,
+      "binomial_500": 28.3221,
+      "monte_carlo_200k": [
+        28.3378,
+        0.0384
+      ],
+      "qmc_sobol": 28.3334
+    },
+    "heston_call": {
+      "fourier": 28.545,
+      "monte_carlo": [
+        28.7316,
+        0.0672
+      ]
+    },
+    "merton_call": {
+      "series": 27.9895,
+      "monte_carlo": [
+        27.9963,
+        0.0454
+      ]
+    },
+    "american_put": {
+      "binomial": 19.5,
+      "lsm": [
+        19.5046,
+        0.0766
+      ]
+    }
+  }
+}

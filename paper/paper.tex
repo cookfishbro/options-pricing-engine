@@ -38,14 +38,16 @@ Merton jump-diffusion model; path-dependent (Asian, barrier, lookback) options;
 and American options via Least-Squares Monte Carlo. Every method is validated
 against an independent benchmark---Fourier prices against Monte Carlo, lattice
 prices against closed forms, and simulation estimators against analytic control
-variates. We show empirically that the Heston and Merton models reproduce the
-implied-volatility smile that Black--Scholes cannot, that a geometric-average
-control variate reduces Asian-option simulation variance by a factor of roughly
-$36\times$, and that a scrambled Sobol sequence improves the European-option
-convergence rate from $O(n^{-1/2})$ toward $O(n^{-1})$. Finally, we calibrate the
-Heston model to a synthetic volatility surface and recover the generating
-parameters to within calibration noise. All results are reproducible from the
-accompanying open-source code.
+variates. We apply the library to real S\&P~500 (SPY) option quotes and show that
+the observed implied-volatility skew, which Black--Scholes cannot represent, is
+reproduced by calibrating the Heston and Merton models to the market: a
+vega-weighted least-squares fit attains $0.60\%$ and $1.22\%$ implied-volatility
+RMSE respectively across 903 liquid quotes spanning six maturities. We further
+demonstrate that a geometric-average control variate reduces Asian-option
+simulation variance by a factor of roughly $36\times$, and that a scrambled Sobol
+sequence improves the European-option convergence rate from $O(n^{-1/2})$ toward
+$O(n^{-1})$. All inputs are real market data and all results are reproducible from
+the accompanying open-source code.
 \end{abstract}
 
 \section{Introduction}
@@ -84,9 +86,9 @@ Section~\ref{sec:bs} reviews the Black--Scholes benchmark and its Greeks.
 Section~\ref{sec:numerics} covers the lattice, Monte Carlo, and quasi-Monte Carlo
 methods used throughout. Section~\ref{sec:beyond} introduces the Heston and
 Merton models and shows that they reproduce the smile. Section~\ref{sec:exotic}
-treats path-dependent and American options. Section~\ref{sec:calib} calibrates
-Heston to a volatility surface. Section~\ref{sec:results} collects the numerical
-results and Section~\ref{sec:conclusion} concludes.
+treats path-dependent and American options. Section~\ref{sec:empirical} calibrates
+the Heston and Merton models to real S\&P~500 option data. Section~\ref{sec:results}
+collects the numerical results and Section~\ref{sec:conclusion} concludes.
 
 \section{The Black--Scholes Benchmark}
 \label{sec:bs}
@@ -228,31 +230,31 @@ independent terminal-value Monte Carlo confirms the series
 (Section~\ref{sec:results}).
 
 \subsection{Reproducing the volatility smile}
-Figure~\ref{fig:smile} is the central qualitative result. Pricing a one-year
-option across strikes under each model and inverting to BSM-implied volatility,
-Black--Scholes is flat by construction, whereas Heston produces a pronounced
-downward skew (driven by $\rho<0$) and Merton a more symmetric smile (driven by
-the fat-tailed jump distribution). Extending across maturities yields the full
-implied-volatility surface of Figure~\ref{fig:surface}: the skew is steepest at
-short maturities and flattens as $T$ grows, matching the well-documented term
-structure of equity-index skew.
+Both models break the constant-volatility straitjacket: pricing options across
+strikes and inverting to BSM-implied volatility yields a non-flat curve. The
+calibrated-Heston implied-volatility surface (Figure~\ref{fig:surface}) shows a
+pronounced downward skew, steepest at short maturities and flattening as $T$
+grows, matching the documented term structure of equity-index skew.
+Section~\ref{sec:empirical} confirms this directly against real S\&P~500 quotes
+and reports the calibration quality.
 
-The mechanism behind the smile is visible directly in the risk-neutral return
+The mechanism behind the smile is visible in the risk-neutral return
 distribution. Figure~\ref{fig:returns} compares the simulated terminal
-log-returns under each model. Black--Scholes is Gaussian by construction; Heston,
+log-returns under the three models, all parameterised by the SPY calibration of
+Section~\ref{sec:empirical}. Black--Scholes is Gaussian by construction; Heston,
 through its negative leverage correlation, is left-skewed, placing more mass on
 large downward moves and thereby richening out-of-the-money puts; Merton's jumps
 produce a sharply peaked body with heavy tails. It is precisely these departures
 from normality---skewness and excess kurtosis---that translate, through the
-inversion of \eqref{eq:bs}, into the non-flat implied-volatility curves of
-Figure~\ref{fig:smile}.
+inversion of \eqref{eq:bs}, into the observed implied-volatility skew.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.78\textwidth]{return_distributions.png}
-\caption{Risk-neutral densities of the terminal log-return $\ln(S_T/S_0)$ at
-$T=1$. Heston is left-skewed and Merton fat-tailed relative to the Gaussian
-Black--Scholes benchmark; these shape deviations are the source of the smile.}
+\caption{Risk-neutral densities of the terminal log-return $\ln(S_T/S_0)$ at the
+SPY reference maturity ($T=0.23$), using the calibrated parameters. Heston is
+left-skewed and Merton fat-tailed relative to the Gaussian Black--Scholes
+benchmark; these shape deviations are the source of the skew.}
 \label{fig:returns}
 \end{figure}
 
@@ -320,84 +322,157 @@ from its European counterpart.
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.72\textwidth]{exercise_boundary.png}
-\caption{Optimal early-exercise boundary $S^*(t)$ for an American put
-($K=100$, $T=1$, $\sigma=20\%$), extracted from the binomial lattice. Exercise is
-optimal in the shaded region below the boundary; the boundary rises to the strike
-at expiry. The staircase pattern reflects the discrete lattice nodes.}
+\caption{Optimal early-exercise boundary $S^*(t)$ for an American put on the SPY
+reference contract ($K=729$, $T=0.23$, $\sigma=16.7\%$), extracted from the
+binomial lattice. Exercise is optimal in the shaded region below the boundary;
+the boundary rises to the strike at expiry. The staircase pattern reflects the
+discrete lattice nodes.}
 \label{fig:boundary}
 \end{figure}
 
-\section{Calibration}
-\label{sec:calib}
+\section{Empirical Application: Calibration to S\&P~500 Options}
+\label{sec:empirical}
 
-Calibration is the inverse problem of pricing: given market option quotes, find
-the model parameters that reproduce them. We minimise the squared pricing error
+\subsection{Data}
+We take the full option chain on the SPDR S\&P~500 ETF (SPY) from Yahoo Finance,
+recorded with the spot at \$728.99 (close of 2026-06-26). The risk-free rate
+$r=3.66\%$ is the 13-week US Treasury-bill yield; for each expiry the forward $F$
+is implied directly from put-call parity, which fixes the carry
+$q=r-\ln(F/S)/T$ without a separate dividend assumption and makes the put and
+call wings consistent at the money. We retain liquid out-of-the-money quotes only
+(positive bid/ask, relative spread below $20\%$, open interest $\geq 25$,
+moneyness in $[0.85,1.15]$): puts below the forward and calls above it. This
+yields \textbf{903 quotes across six maturities} from 21 to 126 days. The
+resulting implied-volatility skew (Figure~\ref{fig:marketsmile}) is the classic
+equity-index shape: out-of-the-money puts trade $10$--$20$ volatility points
+above out-of-the-money calls, and the skew is steepest at the shortest maturity
+and flattens with $T$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\textwidth]{market_smile.png}
+\caption{Market implied-volatility skew of SPY options (as of 2026-06-26, spot
+\$728.99), one curve per expiry. The pronounced negative skew and its
+flattening with maturity are exactly the features Black--Scholes cannot
+represent.}
+\label{fig:marketsmile}
+\end{figure}
+
+\subsection{Calibration}
+Calibration is the inverse problem of pricing: given the market quotes, find the
+model parameters that reproduce them. We minimise the vega-weighted squared
+pricing error
 \begin{equation}
-\min_{(v_0,\kappa,\theta,\xi,\rho)} \sum_{i}
-\left(C^{\text{Heston}}(K_i,T_i;\,\cdot)-C^{\text{mkt}}_i\right)^2
+\min_{\Theta} \sum_{i} w_i^2
+\left(C^{\text{model}}(K_i,T_i;\,\Theta)-C^{\text{mkt}}_i\right)^2,
+\qquad w_i = 1/\mathcal{V}_i,
 \end{equation}
-by the Trust-Region Reflective least-squares method with parameter bounds. To
-validate the procedure end-to-end we generate a synthetic surface from known
-Heston parameters (with small multiplicative quote noise) and recover them. As
-Figure~\ref{fig:calib} shows, the calibrated model reprices the entire surface
-with root-mean-square error below two volatility basis points; the recovered
-$(v_0,\theta,\xi,\rho)$ closely match the generators. The mean-reversion speed
-$\kappa$ is the least well-identified parameter, a known feature of Heston
-calibration arising from its near-degeneracy with $\xi$ and $\theta$ over short
-horizons.
+by the Trust-Region Reflective least-squares method with parameter bounds. The
+vega weighting $w_i=1/\mathcal{V}_i$ converts each dollar residual into an
+approximate implied-volatility residual, so the cheap out-of-the-money options
+that define the skew are not swamped by expensive at-the-money ones. We calibrate
+the five Heston parameters $(v_0,\kappa,\theta,\xi,\rho)$ and the four Merton
+parameters $(\sigma,\lambda,\mu_J,\sigma_J)$ to the same 903 quotes; the
+resulting fits are shown in Figure~\ref{fig:calib} and Table~\ref{tab:calib}.
+
+\begin{table}[H]
+\centering
+\caption{Calibrated parameters and fit quality on the 903 SPY quotes. ``Vol
+RMSE'' is the root-mean-square error in Black--Scholes implied-volatility points.}
+\label{tab:calib}
+\begin{tabular}{lll}
+\toprule
+\multicolumn{2}{l}{\textbf{Heston}} & \textbf{Vol RMSE $=0.60\%$} \\
+\midrule
+$v_0=0.0259$ & $\kappa=8.89$ & $\theta=0.0416$ \\
+$\xi=1.48$ & $\rho=-0.71$ & (Feller $2\kappa\theta>\xi^2$ violated) \\
+\midrule
+\multicolumn{2}{l}{\textbf{Merton}} & \textbf{Vol RMSE $=1.22\%$} \\
+\midrule
+$\sigma=0.111$ & $\lambda=0.85\,\text{yr}^{-1}$ & \\
+$\mu_J=-0.130$ & $\sigma_J=0.085$ & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The economic content of the estimates is exactly what the skew implies. Heston's
+correlation $\rho=-0.71$ is strongly negative---the leverage effect that tilts
+the smile downward---and Merton's mean jump $\mu_J=-0.13$ with intensity
+$\lambda=0.85\,\text{yr}^{-1}$ encodes the market's pricing of sudden downward
+moves (crash risk). Heston fits the surface markedly better than Merton ($0.60\%$
+vs.\ $1.22\%$ vol RMSE): as Figure~\ref{fig:calib} shows, its two
+skew-shaping parameters track the smile across maturities, whereas Merton's
+fit deteriorates in the wings and at the shortest maturity, where even Heston
+cannot fully match the steepness---a documented limitation of diffusive
+stochastic-volatility models at short horizons. The calibrated $\kappa$ is the
+least well-identified parameter, a known near-degeneracy with $\xi$ and $\theta$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{calibration_fit_real.png}
+\caption{Heston and Merton calibrated to SPY options at three maturities. Markers
+are market implied volatilities; lines are the calibrated models. Heston (solid)
+fits the skew tightly except at the extreme short-dated wings; Merton (dashed)
+captures the level but underfits the curvature.}
+\label{fig:calib}
+\end{figure}
 
 \section{Numerical Results}
 \label{sec:results}
 
-All experiments use $S_0=100$, $r=5\%$, and (where applicable) $\sigma=20\%$.
-Table~\ref{tab:benchmark} collects the at-the-money one-year European call across
-methods; all four agree to within Monte Carlo error, validating the
-implementations against one another. Table~\ref{tab:advanced} reports the
-advanced-model cross-checks: Heston Fourier vs.\ Monte Carlo, Merton series vs.\
-Monte Carlo, and American LSM vs.\ lattice.
+All experiments use the real SPY reference contract: a near-at-the-money option
+with $S_0=728.99$, $K=729$, $T=0.23$, $r=3.66\%$, the parity-implied carry
+$q=-2.12\%$, and at-the-money implied volatility $\sigma=16.65\%$.
+Table~\ref{tab:benchmark} collects the European call across the four numerical
+methods; all agree to within Monte Carlo error, validating the implementations
+against one another. Table~\ref{tab:advanced} reports the advanced-model
+cross-checks, each priced two independent ways on the same contract.
 
 \begin{table}[H]
 \centering
-\caption{European ATM call ($S_0=K=100$, $T=1$, $r=5\%$, $\sigma=20\%$).
-``SE'' is the Monte Carlo standard error.}
+\caption{European call on the real SPY contract ($S_0=728.99$, $K=729$,
+$T=0.23$, $r=3.66\%$, $q=-2.12\%$, $\sigma=16.65\%$). ``SE'' is the Monte Carlo
+standard error.}
 \label{tab:benchmark}
 \begin{tabular}{lcc}
 \toprule
 Method & Price & Note \\
 \midrule
-Black--Scholes (closed form) & 10.4506 & benchmark \\
-Binomial tree (500 steps)    & 10.4466 & $O(1/N)$ convergence \\
-Monte Carlo (200k paths)     & 10.4661 & SE $=0.0126$ \\
-Quasi-Monte Carlo (Sobol, $2^{16}$) & 10.4505 & error $4\times10^{-5}$ \\
+Black--Scholes (closed form) & 28.334 & benchmark \\
+Binomial tree (500 steps)    & 28.322 & $O(1/N)$ convergence \\
+Monte Carlo (200k paths)     & 28.338 & SE $=0.038$ \\
+Quasi-Monte Carlo (Sobol, $2^{16}$) & 28.333 & error $7\times10^{-4}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[H]
 \centering
-\caption{Cross-validation of advanced models. Each row prices the same contract
-two independent ways; agreement is reported in standard errors (SE) where
-applicable.}
+\caption{Cross-validation of the advanced models on the SPY contract using the
+calibrated parameters. Each row prices the same contract two independent ways;
+``SE'' is the Monte Carlo standard error. Prices differ across rows because each
+model is priced with its own calibrated (full-smile) parameters, not the single
+at-the-money volatility.}
 \label{tab:advanced}
-\begin{tabular}{llccc}
+\begin{tabular}{lllcc}
 \toprule
-Model / contract & Method A & Method B & A & B \\
+Model & Method A & Method B & A & B \\
 \midrule
-Heston call & Fourier & Monte Carlo & 10.155 & $10.198\pm0.025$ \\
-Merton call & Series & Monte Carlo & 11.662 & $11.678\pm0.017$ \\
-American put & Lattice & LSM & 6.090 & $6.082\pm0.023$ \\
-Geometric Asian & Closed form & --- & 5.641 & --- \\
-Barrier (in$+$out) & Monte Carlo & Vanilla & 10.440 & 10.451 \\
+Heston call & Fourier & Monte Carlo & 28.545 & $28.732\pm0.067$ \\
+Merton call & Series & Monte Carlo & 27.990 & $27.996\pm0.045$ \\
+American put & Lattice & LSM & 19.500 & $19.505\pm0.077$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The variance-reduction and convergence experiments are summarised in the figures.
+The variance-reduction and convergence experiments are summarised in the figures,
+all computed on the real SPY contract.
 Figure~\ref{fig:binomial} shows the binomial tree converging to Black--Scholes.
 Figure~\ref{fig:mcvar} shows antithetic-plus-control-variate Monte Carlo
 dominating plain Monte Carlo at every sample size. Figure~\ref{fig:qmc} shows the
-quasi-Monte Carlo convergence-rate improvement. The smile, surface, and
-calibration figures appear in Sections~\ref{sec:beyond}--\ref{sec:calib}.
+quasi-Monte Carlo convergence-rate improvement. The market smile, calibrated
+surface, and calibration-fit figures appear in
+Sections~\ref{sec:beyond} and~\ref{sec:empirical}.
 
 \begin{figure}[H]
 \centering
@@ -416,19 +491,9 @@ calibration figures appear in Sections~\ref{sec:beyond}--\ref{sec:calib}.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.72\textwidth]{vol_smile.png}
-\caption{BSM-implied volatility by strike under three models ($T=1$). Black--Scholes
-is flat; Heston ($\rho=-0.7$) produces a downward skew; Merton's jumps produce a
-smile. This is the empirical signature the advanced models are designed to
-capture.}
-\label{fig:smile}
-\end{figure}
-
-\begin{figure}[H]
-\centering
 \begin{subfigure}{0.49\textwidth}
 \includegraphics[width=\textwidth]{heston_surface.png}
-\caption{Heston implied-volatility surface.}
+\caption{Calibrated-Heston implied-volatility surface.}
 \label{fig:surface}
 \end{subfigure}\hfill
 \begin{subfigure}{0.49\textwidth}
@@ -436,18 +501,9 @@ capture.}
 \caption{QMC vs.\ pseudo-random convergence.}
 \label{fig:qmc}
 \end{subfigure}
-\caption{Left: the skew steepens at short maturities and flattens with $T$.
-Right: Sobol QMC error tracks $O(n^{-1})$ while pseudo-random MC tracks
-$O(n^{-1/2})$.}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{calibration_fit.png}
-\caption{Heston calibrated to a synthetic volatility surface at three maturities.
-The calibrated model (line) reprices the market quotes (dots) with RMSE below two
-volatility basis points, recovering the generating parameters.}
-\label{fig:calib}
+\caption{Left: the SPY-calibrated Heston surface---skew steepest at short
+maturities, flattening with $T$. Right: Sobol QMC error tracks $O(n^{-1})$ while
+pseudo-random MC tracks $O(n^{-1/2})$.}
 \end{figure}
 
 \section{Conclusion}
@@ -455,36 +511,35 @@ volatility basis points, recovering the generating parameters.}
 
 We have built and empirically validated a hierarchy of option-pricing models and
 numerical methods, organised around the failure of the Black--Scholes
-constant-volatility assumption. The Heston and Merton models reproduce the
-volatility smile and its term structure that Black--Scholes cannot; semi-analytic
-Fourier pricing, variance-reduced and quasi-Monte Carlo simulation, and
-regression-based American exercise make these models computationally tractable;
-and a calibration experiment closes the loop from market data back to model
-parameters. The recurring theme is cross-validation: each price is confirmed by
-an independent method, which is both a correctness discipline and, for a
-practitioner, a source of confidence in the numbers.
+constant-volatility assumption, and applied to real S\&P~500 option data. The
+Heston and Merton models reproduce the market volatility skew and its term
+structure that Black--Scholes cannot; semi-analytic Fourier pricing,
+variance-reduced and quasi-Monte Carlo simulation, and regression-based American
+exercise make these models computationally tractable; and calibration to live
+quotes closes the loop from market data back to model parameters. The recurring
+theme is cross-validation: each price is confirmed by an independent method, which
+is both a correctness discipline and, for a practitioner, a source of confidence
+in the numbers.
 
-The principal quantitative findings are:
+The principal quantitative findings, all on real SPY data, are:
 \begin{itemize}
-\item All four European benchmark methods agree on the at-the-money call to within
-Monte Carlo error; the Sobol quasi-Monte Carlo estimator matches the closed form
-to $4\times10^{-5}$ at $2^{16}$ samples (Table~\ref{tab:benchmark}).
-\item The Heston Fourier price and Merton series each agree with an independent
-Monte Carlo estimate to within one to two standard errors, and the American LSM
-price matches the binomial lattice to within simulation error
-(Table~\ref{tab:advanced}).
-\item Stochastic volatility ($\rho=-0.7$) and jumps reproduce the empirically
-observed skew and smile that Black--Scholes cannot (Figure~\ref{fig:smile}), with
-$\rho$ governing skew and the vol-of-vol $\xi$ governing convexity
-(Figure~\ref{fig:sensitivity}).
+\item Calibrated to 903 liquid SPY quotes across six maturities, Heston fits the
+market skew to $0.60\%$ implied-volatility RMSE and Merton to $1.22\%$
+(Table~\ref{tab:calib}, Figure~\ref{fig:calib}); the estimated $\rho=-0.71$ and
+mean jump $\mu_J=-0.13$ quantify the market's leverage effect and crash-risk
+pricing.
+\item All four European methods agree on the real SPY call to within Monte Carlo
+error (Table~\ref{tab:benchmark}); the Heston Fourier price, Merton series, and
+American LSM price each match their independent counterpart to within one to three
+standard errors (Table~\ref{tab:advanced}).
+\item The correlation $\rho$ governs the skew and the vol-of-vol $\xi$ the
+convexity of the Heston smile (Figure~\ref{fig:sensitivity}), and the calibrated
+models' non-Gaussian return distributions (Figure~\ref{fig:returns}) are the
+mechanism that generates the observed skew.
 \item Variance reduction is highly effective: a geometric-Asian control variate
 cuts the arithmetic-Asian standard error by roughly $36\times$, and Sobol QMC
 improves the European convergence rate from $O(n^{-1/2})$ toward $O(n^{-1})$
 (Figure~\ref{fig:qmc}).
-\item Heston calibration recovers the parameters of a synthetic surface with
-root-mean-square repricing error below two volatility basis points
-(Figure~\ref{fig:calib}), with the mean-reversion speed $\kappa$ the least
-identifiable parameter.
 \end{itemize}
 
 Natural extensions include the Bates model (Heston with jumps), the SABR model

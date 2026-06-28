@@ -15,7 +15,7 @@ from .exotics import (
 from .american_mc import longstaff_schwartz_price
 from .quasi_mc import qmc_european_price
 from .vol_surface import implied_vol_smile, implied_vol_surface
-from .calibration import calibrate_heston
+from .calibration import calibrate_heston, calibrate_merton
 
 __all__ = [
     "bs_price",
@@ -41,4 +41,5 @@ __all__ = [
     "implied_vol_smile",
     "implied_vol_surface",
     "calibrate_heston",
+    "calibrate_merton",
 ]
