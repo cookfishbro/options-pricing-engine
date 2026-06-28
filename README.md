@@ -1,62 +1,93 @@
 # Options Pricing Engine
 
-A from-scratch implementation of three standard approaches to European/American
-option pricing, built to compare their accuracy, convergence, and computational
-trade-offs:
+A from-scratch derivatives-pricing library spanning the classical Black-Scholes
+benchmark through stochastic-volatility, jump-diffusion, exotic, and American
+options. The organising theme is **cross-validation**: every method is checked
+against an independent one (Fourier vs. Monte Carlo, lattice vs. closed form,
+simulation vs. analytic control variate).
 
-- **Black-Scholes-Merton** closed-form price and Greeks (delta, gamma, vega, theta, rho)
-- **Cox-Ross-Rubinstein binomial tree**, supporting both European and American exercise
-- **Monte Carlo simulation** under geometric Brownian motion, with antithetic
-  variates and a control-variate estimator for variance reduction
-- **Implied volatility solver** (Newton-Raphson with a Brent's-method fallback
-  for low-vega regions)
+A companion academic paper, [**"Beyond Black-Scholes"**](paper/paper.pdf)
+([LaTeX source](paper/paper.tex)), writes up the models, methods, and numerical
+results.
 
-## Why these three methods
+## What's implemented
 
-Each method makes a different trade-off:
+**Models**
+- **Black-Scholes-Merton** — closed-form price and analytic Greeks (Δ, Γ, vega, Θ, ρ)
+- **Heston (1993) stochastic volatility** — semi-analytic Fourier pricing (Albrecher
+  "good" characteristic function) *and* full-truncation Euler Monte Carlo
+- **Merton (1976) jump-diffusion** — closed-form Poisson series *and* Monte Carlo
 
-| Method | Exercise style | Speed | Notes |
-|---|---|---|---|
-| Black-Scholes | European only | Instant (closed-form) | Ground truth for European options |
-| Binomial tree | European & American | Fast, scales with steps² | Only practical way here to price American options |
-| Monte Carlo | European (path-dependent payoffs extend naturally) | Slower, scales with paths | Necessary for path-dependent/exotic payoffs that lack closed forms |
+**Numerical methods**
+- **Cox-Ross-Rubinstein binomial tree** — European and American exercise
+- **Monte Carlo** — antithetic variates + control variates
+- **Quasi-Monte Carlo** — scrambled Sobol sequence, ~`O(n⁻¹)` convergence
+- **Longstaff-Schwartz** least-squares Monte Carlo for American options
 
-## Results
+**Exotics (path-dependent, Monte Carlo)**
+- Arithmetic **Asian** options with a geometric-Asian control variate (~36× variance reduction)
+- **Barrier** options (knock-in/out), validated by in-out parity
+- Floating-strike **lookback** options
 
-Pricing a 1-year ATM call (S=K=100, r=5%, σ=20%):
+**Applications**
+- **Implied volatility** solver (Newton-Raphson with Brent fallback)
+- **Volatility smile / surface** construction
+- **Heston calibration** to a market volatility surface (least squares)
 
-| Method | Price |
-|---|---|
-| Black-Scholes | 10.4506 |
-| Binomial tree (500 steps) | 10.4466 |
-| Monte Carlo (200k paths) | 10.4661 ± 0.0126 (1 std. error) |
+## Key results
 
-**Binomial tree convergence** — absolute error vs. Black-Scholes as the number
-of tree steps increases:
+Every method agrees with an independent benchmark:
 
-![Binomial convergence](results/binomial_convergence.png)
+| Contract | Method A | Method B |
+|---|---|---|
+| European ATM call | Black-Scholes 10.4506 | QMC 10.4505 / Tree 10.4466 / MC 10.4661±0.013 |
+| Heston call | Fourier 10.155 | Monte Carlo 10.198±0.025 |
+| Merton call | Series 11.662 | Monte Carlo 11.678±0.017 |
+| American put | Lattice 6.090 | Longstaff-Schwartz 6.082±0.023 |
+| Barrier (in+out) | Monte Carlo 10.440 | Vanilla 10.451 |
 
-**Monte Carlo variance reduction** — plain simulation vs. antithetic variates +
-control variate, at matched path counts:
+**The volatility smile** — the central qualitative result. Black-Scholes is flat
+by construction; Heston (ρ = −0.7) produces a skew and Merton's jumps produce a
+smile, matching what's observed in real markets:
 
-![Monte Carlo variance reduction](results/mc_variance_reduction.png)
+![Volatility smile](results/vol_smile.png)
 
-Variance reduction consistently cuts the error by roughly an order of
-magnitude at a given path count, which matters a lot in practice since Monte
-Carlo error only shrinks as 1/√n — getting another digit of accuracy by
-brute force alone requires 100x more paths.
+**Quasi-Monte Carlo** improves the convergence rate from `O(n⁻¹/²)` to ~`O(n⁻¹)`:
+
+![QMC convergence](results/qmc_convergence.png)
+
+**Heston calibration** recovers the generating parameters from a synthetic
+surface to under two volatility basis points RMSE:
+
+![Calibration fit](results/calibration_fit.png)
+
+(See `results/` for the binomial convergence, MC variance reduction, and Heston
+surface plots as well.)
 
 ## Project structure
 
 ```
 options_pricing/
-  black_scholes.py   # closed-form price + Greeks
-  binomial_tree.py    # CRR tree, European & American
-  monte_carlo.py       # GBM simulation, antithetic + control variate
-  implied_vol.py       # Newton-Raphson with Brent fallback
-tests/                  # correctness tests (put-call parity, convergence, etc.)
-demo/run_demo.py         # generates the plots and summary table above
-results/                  # output plots
+  black_scholes.py     # closed-form price + Greeks
+  binomial_tree.py      # CRR tree, European & American
+  monte_carlo.py         # GBM MC, antithetic + control variate
+  quasi_mc.py             # Sobol quasi-Monte Carlo
+  implied_vol.py           # Newton-Raphson + Brent fallback
+  heston.py                 # Heston: Fourier pricing + MC
+  merton_jump.py             # Merton jump-diffusion: series + MC
+  paths.py                    # GBM path simulation, Sobol normals
+  exotics.py                   # Asian, barrier, lookback
+  american_mc.py                # Longstaff-Schwartz LSM
+  vol_surface.py                 # implied-vol smile/surface
+  calibration.py                  # Heston calibration
+tests/                              # 31 cross-validation tests
+demo/
+  run_demo.py            # benchmark: convergence + variance-reduction plots
+  advanced_demo.py        # smile, surface, QMC, calibration plots
+paper/
+  paper.tex               # academic write-up (LaTeX source)
+  paper.pdf                # compiled paper
+results/                    # generated figures
 ```
 
 ## Setup
@@ -68,22 +99,29 @@ pip install -r requirements.txt
 ## Usage
 
 ```python
-from options_pricing import bs_price, bs_greeks, binomial_price, mc_price, implied_vol
+from options_pricing import (
+    bs_price, heston_price, merton_price,
+    asian_mc_price, longstaff_schwartz_price, calibrate_heston,
+)
 
-# Black-Scholes price and Greeks
-price = bs_price(S=100, K=100, T=1, r=0.05, sigma=0.2, option_type="call")
-greeks = bs_greeks(S=100, K=100, T=1, r=0.05, sigma=0.2, option_type="call")
+# Black-Scholes
+bs = bs_price(S=100, K=100, T=1, r=0.05, sigma=0.2, option_type="call")
 
-# American put via binomial tree
-am_put = binomial_price(S=100, K=100, T=1, r=0.05, sigma=0.2,
-                         n_steps=500, option_type="put", american=True)
+# Heston stochastic volatility (semi-analytic Fourier price)
+hest = heston_price(S0=100, K=100, T=1, r=0.05,
+                    v0=0.04, kappa=2.0, theta=0.04, sigma=0.5, rho=-0.7,
+                    option_type="call")
 
-# Monte Carlo with variance reduction
-mc_call, std_error = mc_price(S=100, K=100, T=1, r=0.05, sigma=0.2,
-                               option_type="call", n_paths=200_000)
+# Merton jump-diffusion (closed-form series)
+mert = merton_price(S=100, K=100, T=1, r=0.05, sigma=0.2,
+                    lam=0.5, muJ=-0.1, sigmaJ=0.15, option_type="call")
 
-# Solve for implied vol given a market price
-iv = implied_vol(price=10.45, S=100, K=100, T=1, r=0.05, option_type="call")
+# Arithmetic Asian with geometric control variate
+asian, se = asian_mc_price(S0=100, K=100, T=1, r=0.05, sigma=0.2, n_fixings=50)
+
+# American put via Longstaff-Schwartz
+am_put, se = longstaff_schwartz_price(S0=100, K=100, T=1, r=0.05, sigma=0.2,
+                                      option_type="put")
 ```
 
 ## Tests
@@ -92,12 +130,22 @@ iv = implied_vol(price=10.45, S=100, K=100, T=1, r=0.05, option_type="call")
 pytest -v
 ```
 
-13 tests cover put-call parity, convergence of the binomial tree to
-Black-Scholes, Monte Carlo accuracy within its confidence interval, American
-vs. European exercise value, and round-trip recovery of implied volatility.
+31 tests covering put-call parity, lattice/Fourier/series/MC cross-agreement,
+variance-reduction efficiency, QMC convergence, in-out barrier parity, and
+round-trip Heston calibration.
 
-## Reproducing the plots
+## Reproducing the figures
 
 ```bash
-python demo/run_demo.py
+python demo/run_demo.py        # benchmark figures
+python demo/advanced_demo.py    # smile, surface, QMC, calibration
+```
+
+## Building the paper
+
+The compiled [`paper/paper.pdf`](paper/paper.pdf) is included. To rebuild from
+source you need a LaTeX distribution (e.g. TeX Live or MiKTeX):
+
+```bash
+cd paper && pdflatex paper.tex && pdflatex paper.tex
 ```
