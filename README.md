@@ -61,8 +61,14 @@ surface to under two volatility basis points RMSE:
 
 ![Calibration fit](results/calibration_fit.png)
 
-(See `results/` for the binomial convergence, MC variance reduction, and Heston
-surface plots as well.)
+**The mechanism behind the smile** — the risk-neutral return distributions show
+Heston's negative skew and Merton's fat tails relative to the Gaussian benchmark:
+
+![Return distributions](results/return_distributions.png)
+
+(See `results/` for the binomial convergence, MC variance reduction, Heston
+surface, Greeks profiles, American exercise boundary, and smile-sensitivity plots
+as well.)
 
 ## Project structure
 
@@ -83,7 +89,8 @@ options_pricing/
 tests/                              # 31 cross-validation tests
 demo/
   run_demo.py            # benchmark: convergence + variance-reduction plots
-  advanced_demo.py        # smile, surface, QMC, calibration plots
+  advanced_demo.py        # smile, surface, QMC, calibration, distributions,
+                          # Greeks, exercise-boundary, sensitivity plots
 paper/
   paper.tex               # academic write-up (LaTeX source)
   paper.pdf                # compiled paper

@@ -18,8 +18,7 @@
 \title{\textbf{Beyond Black--Scholes: A Computational Study of\\
 Option Pricing under Stochastic Volatility and Jumps}}
 
-% TODO: replace with your name before submitting with your application.
-\author{$\langle$Your Name$\rangle$}
+\author{Chia-Jui Yeh}
 \affil{\small Companion paper to the \texttt{options-pricing-engine} repository}
 \date{June 2026}
 
@@ -113,7 +112,20 @@ $\mathcal{V}=\partial C/\partial \sigma$ (vega), $\Theta=\partial C/\partial t$,
 and $\rho=\partial C/\partial r$ in closed form. These serve both for hedging and
 as a consistency check: e.g.\ $\Gamma$ is identical for calls and puts, and
 $0<\Delta_{\text{call}}<1$ while $-1<\Delta_{\text{put}}<0$, both verified in the
-test suite.
+test suite. Figure~\ref{fig:greeks} plots the principal Greeks against spot: the
+call delta rises sigmoidally from $0$ to $1$ as the option moves into the money,
+while gamma and vega---the second-order and volatility sensitivities---peak near
+the money, where optionality is greatest, and decay in both tails.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{greeks_profiles.png}
+\caption{Black--Scholes Greeks as a function of spot ($K=100$, $T=1$,
+$\sigma=20\%$). Delta is bounded in $(0,1)$ for the call and $(-1,0)$ for the
+put; gamma and vega are identical for calls and puts and are maximal near the
+money.}
+\label{fig:greeks}
+\end{figure}
 
 \paragraph{Implied volatility.} Given a market price, the implied volatility is
 the $\sigma$ solving \eqref{eq:bs}. We invert it by Newton--Raphson using the
@@ -225,6 +237,43 @@ implied-volatility surface of Figure~\ref{fig:surface}: the skew is steepest at
 short maturities and flattens as $T$ grows, matching the well-documented term
 structure of equity-index skew.
 
+The mechanism behind the smile is visible directly in the risk-neutral return
+distribution. Figure~\ref{fig:returns} compares the simulated terminal
+log-returns under each model. Black--Scholes is Gaussian by construction; Heston,
+through its negative leverage correlation, is left-skewed, placing more mass on
+large downward moves and thereby richening out-of-the-money puts; Merton's jumps
+produce a sharply peaked body with heavy tails. It is precisely these departures
+from normality---skewness and excess kurtosis---that translate, through the
+inversion of \eqref{eq:bs}, into the non-flat implied-volatility curves of
+Figure~\ref{fig:smile}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\textwidth]{return_distributions.png}
+\caption{Risk-neutral densities of the terminal log-return $\ln(S_T/S_0)$ at
+$T=1$. Heston is left-skewed and Merton fat-tailed relative to the Gaussian
+Black--Scholes benchmark; these shape deviations are the source of the smile.}
+\label{fig:returns}
+\end{figure}
+
+The two Heston parameters that shape the smile play distinct, interpretable
+roles, illustrated in Figure~\ref{fig:sensitivity}. The leverage correlation
+$\rho$ tilts the smile: $\rho<0$ produces the downward equity skew, $\rho>0$ an
+upward skew, and $\rho=0$ a symmetric smile. The vol-of-vol $\xi$ governs
+convexity: raising $\xi$ fattens both tails and deepens the curvature of the
+smile, while leaving the at-the-money level largely unchanged. This decoupling is
+what makes the model practically calibratable---$\rho$ and $\xi$ target the slope
+and curvature of the observed surface almost independently.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{smile_sensitivity.png}
+\caption{Heston smile sensitivity. Left: the correlation $\rho$ controls the
+sign and steepness of the skew. Right: the vol-of-vol $\xi$ controls the
+convexity of the smile.}
+\label{fig:sensitivity}
+\end{figure}
+
 \section{Path-Dependent and American Options}
 \label{sec:exotic}
 
@@ -258,6 +307,25 @@ basis of the current spot, restricted to in-the-money paths, then applies the
 resulting exercise policy by backward induction. For an American put our LSM
 estimate agrees with a high-resolution binomial lattice to within simulation
 error (Section~\ref{sec:results}), confirming both implementations.
+
+The early-exercise decision is summarised by the \emph{exercise boundary}
+$S^*(t)$: the critical spot below which (for a put) immediate exercise dominates
+holding. Figure~\ref{fig:boundary} extracts this boundary from the lattice. It
+lies strictly below the strike, rises monotonically toward $K$ as maturity
+approaches---reflecting the shrinking time value that early exercise forgoes---and
+meets the strike at expiry. The region beneath the curve is where the American
+option is worth more dead than alive, the precise locus that distinguishes it
+from its European counterpart.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{exercise_boundary.png}
+\caption{Optimal early-exercise boundary $S^*(t)$ for an American put
+($K=100$, $T=1$, $\sigma=20\%$), extracted from the binomial lattice. Exercise is
+optimal in the shaded region below the boundary; the boundary rises to the strike
+at expiry. The staircase pattern reflects the discrete lattice nodes.}
+\label{fig:boundary}
+\end{figure}
 
 \section{Calibration}
 \label{sec:calib}
@@ -395,6 +463,29 @@ and a calibration experiment closes the loop from market data back to model
 parameters. The recurring theme is cross-validation: each price is confirmed by
 an independent method, which is both a correctness discipline and, for a
 practitioner, a source of confidence in the numbers.
+
+The principal quantitative findings are:
+\begin{itemize}
+\item All four European benchmark methods agree on the at-the-money call to within
+Monte Carlo error; the Sobol quasi-Monte Carlo estimator matches the closed form
+to $4\times10^{-5}$ at $2^{16}$ samples (Table~\ref{tab:benchmark}).
+\item The Heston Fourier price and Merton series each agree with an independent
+Monte Carlo estimate to within one to two standard errors, and the American LSM
+price matches the binomial lattice to within simulation error
+(Table~\ref{tab:advanced}).
+\item Stochastic volatility ($\rho=-0.7$) and jumps reproduce the empirically
+observed skew and smile that Black--Scholes cannot (Figure~\ref{fig:smile}), with
+$\rho$ governing skew and the vol-of-vol $\xi$ governing convexity
+(Figure~\ref{fig:sensitivity}).
+\item Variance reduction is highly effective: a geometric-Asian control variate
+cuts the arithmetic-Asian standard error by roughly $36\times$, and Sobol QMC
+improves the European convergence rate from $O(n^{-1/2})$ toward $O(n^{-1})$
+(Figure~\ref{fig:qmc}).
+\item Heston calibration recovers the parameters of a synthetic surface with
+root-mean-square repricing error below two volatility basis points
+(Figure~\ref{fig:calib}), with the mean-reversion speed $\kappa$ the least
+identifiable parameter.
+\end{itemize}
 
 Natural extensions include the Bates model (Heston with jumps), the SABR model
 for interest-rate smiles, Andersen's Quadratic-Exponential scheme for unbiased

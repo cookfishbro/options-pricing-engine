@@ -71,12 +71,12 @@ def heston_price(S0, K, T, r, v0, kappa, theta, sigma, rho, option_type="call", 
     raise ValueError("option_type must be 'call' or 'put'")
 
 
-def heston_mc_price(
-    S0, K, T, r, v0, kappa, theta, sigma, rho, option_type="call", q=0.0,
+def heston_terminal_samples(
+    S0, T, r, v0, kappa, theta, sigma, rho, q=0.0,
     n_paths=100_000, n_steps=200, seed=None,
 ):
-    """Monte Carlo price under the full-truncation Euler scheme (Lord et al.,
-    2010). Returns (price, standard_error)."""
+    """Simulate terminal prices S_T under the full-truncation Euler scheme
+    (Lord et al., 2010). Returns an array of length n_paths."""
     rng = np.random.default_rng(seed)
     dt = T / n_steps
     sqrt_dt = math.sqrt(dt)
@@ -92,7 +92,18 @@ def heston_mc_price(
         log_s += (r - q - 0.5 * v_pos) * dt + np.sqrt(v_pos) * sqrt_dt * z_s
         v += kappa * (theta - v_pos) * dt + sigma * np.sqrt(v_pos) * sqrt_dt * z_v
 
-    ST = np.exp(log_s)
+    return np.exp(log_s)
+
+
+def heston_mc_price(
+    S0, K, T, r, v0, kappa, theta, sigma, rho, option_type="call", q=0.0,
+    n_paths=100_000, n_steps=200, seed=None,
+):
+    """Monte Carlo price under the full-truncation Euler scheme (Lord et al.,
+    2010). Returns (price, standard_error)."""
+    ST = heston_terminal_samples(
+        S0, T, r, v0, kappa, theta, sigma, rho, q, n_paths, n_steps, seed
+    )
     if option_type == "call":
         payoff = np.maximum(ST - K, 0.0)
     elif option_type == "put":

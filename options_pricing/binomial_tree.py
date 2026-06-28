@@ -30,3 +30,45 @@ def binomial_price(S, K, T, r, sigma, n_steps=200, option_type="call", american=
             values = np.maximum(values, exercise)
 
     return float(values[0])
+
+
+def american_exercise_boundary(S, K, T, r, sigma, n_steps=400, option_type="put", q=0.0):
+    """Extract the optimal early-exercise boundary of an American option via the
+    binomial lattice.
+
+    Returns (times, boundary): for each time step, the critical spot price at
+    which immediate exercise becomes optimal (the largest exercised spot for a
+    put, the smallest for a call). Nodes never optimal to exercise yield NaN.
+    """
+    dt = T / n_steps
+    u = math.exp(sigma * math.sqrt(dt))
+    d = 1 / u
+    p = (math.exp((r - q) * dt) - d) / (u - d)
+    discount = math.exp(-r * dt)
+
+    j = np.arange(n_steps + 1)
+    spot_at_maturity = S * u ** j * d ** (n_steps - j)
+    if option_type == "call":
+        values = np.maximum(spot_at_maturity - K, 0.0)
+    elif option_type == "put":
+        values = np.maximum(K - spot_at_maturity, 0.0)
+    else:
+        raise ValueError("option_type must be 'call' or 'put'")
+
+    times = np.arange(n_steps + 1) * dt
+    boundary = np.full(n_steps + 1, np.nan)
+
+    for step in range(n_steps - 1, -1, -1):
+        values = discount * (p * values[1:step + 2] + (1 - p) * values[0:step + 1])
+        j = np.arange(step + 1)
+        spot = S * u ** j * d ** (step - j)
+        exercise = np.maximum(spot - K, 0.0) if option_type == "call" else np.maximum(K - spot, 0.0)
+        exercised = exercise > values
+        values = np.maximum(values, exercise)
+
+        if exercised.any():
+            # Put: exercise for low spots -> boundary is the highest exercised spot.
+            # Call: exercise for high spots -> boundary is the lowest exercised spot.
+            boundary[step] = spot[exercised].max() if option_type == "put" else spot[exercised].min()
+
+    return times, boundary

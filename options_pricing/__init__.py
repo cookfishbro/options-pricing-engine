@@ -2,8 +2,9 @@ from .black_scholes import bs_price, bs_greeks
 from .binomial_tree import binomial_price
 from .monte_carlo import mc_price
 from .implied_vol import implied_vol
-from .heston import heston_price, heston_mc_price
-from .merton_jump import merton_price, merton_mc_price
+from .heston import heston_price, heston_mc_price, heston_terminal_samples
+from .merton_jump import merton_price, merton_mc_price, merton_terminal_samples
+from .binomial_tree import american_exercise_boundary
 from .paths import gbm_paths, sobol_normals
 from .exotics import (
     asian_mc_price,
@@ -24,8 +25,11 @@ __all__ = [
     "implied_vol",
     "heston_price",
     "heston_mc_price",
+    "heston_terminal_samples",
     "merton_price",
     "merton_mc_price",
+    "merton_terminal_samples",
+    "american_exercise_boundary",
     "gbm_paths",
     "sobol_normals",
     "asian_mc_price",

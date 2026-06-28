@@ -1,6 +1,10 @@
 import math
 
-from options_pricing import bs_price, heston_price, heston_mc_price
+import numpy as np
+
+from options_pricing import (
+    bs_price, heston_price, heston_mc_price, heston_terminal_samples,
+)
 
 S, K, T, r = 100, 100, 1.0, 0.05
 PARAMS = dict(v0=0.04, kappa=2.0, theta=0.04, sigma=0.5, rho=-0.7)
@@ -27,6 +31,13 @@ def test_fourier_matches_monte_carlo():
                              n_paths=200_000, n_steps=200, seed=1, **PARAMS)
     # Within ~3 SE plus a small allowance for Euler discretisation bias.
     assert abs(fourier - mc) < 3 * se + 0.05
+
+
+def test_terminal_samples_satisfy_martingale_property():
+    # Discounted expected terminal price must equal the forward S0*exp(-qT).
+    ST = heston_terminal_samples(S, T, r, n_paths=200_000, n_steps=200, seed=1, **PARAMS)
+    discounted_mean = math.exp(-r * T) * ST.mean()
+    assert abs(discounted_mean - S) / S < 0.01
 
 
 def test_negative_correlation_creates_negative_skew():

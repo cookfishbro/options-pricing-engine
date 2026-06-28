@@ -36,12 +36,11 @@ def merton_price(
     return price
 
 
-def merton_mc_price(
-    S, K, T, r, sigma, lam, muJ, sigmaJ, option_type="call", q=0.0,
-    n_paths=200_000, seed=None,
+def merton_terminal_samples(
+    S, T, r, sigma, lam, muJ, sigmaJ, q=0.0, n_paths=200_000, seed=None,
 ):
-    """Monte Carlo price by simulating the terminal value directly. Returns
-    (price, standard_error)."""
+    """Simulate terminal prices S_T under the Merton model. Returns an array of
+    length n_paths."""
     rng = np.random.default_rng(seed)
     k = math.exp(muJ + 0.5 * sigmaJ ** 2) - 1.0
 
@@ -52,7 +51,16 @@ def merton_mc_price(
 
     drift = (r - q - 0.5 * sigma ** 2 - lam * k) * T
     log_ST = math.log(S) + drift + sigma * math.sqrt(T) * z + jump_component
-    ST = np.exp(log_ST)
+    return np.exp(log_ST)
+
+
+def merton_mc_price(
+    S, K, T, r, sigma, lam, muJ, sigmaJ, option_type="call", q=0.0,
+    n_paths=200_000, seed=None,
+):
+    """Monte Carlo price by simulating the terminal value directly. Returns
+    (price, standard_error)."""
+    ST = merton_terminal_samples(S, T, r, sigma, lam, muJ, sigmaJ, q, n_paths, seed)
 
     if option_type == "call":
         payoff = np.maximum(ST - K, 0.0)

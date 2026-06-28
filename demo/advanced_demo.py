@@ -5,6 +5,10 @@ Figures produced:
   heston_surface.png       Heston implied-vol surface across strikes/maturities
   qmc_convergence.png      Sobol QMC vs pseudo-random MC convergence
   calibration_fit.png      Calibrated Heston smile vs synthetic market quotes
+  return_distributions.png Terminal log-return densities by model (smile mechanism)
+  greeks_profiles.png      Delta, Gamma, Vega vs spot
+  exercise_boundary.png    American-put optimal early-exercise boundary
+  smile_sensitivity.png    Heston smile vs correlation and vol-of-vol
 """
 
 import os
@@ -12,12 +16,14 @@ import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.stats import gaussian_kde, norm
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from options_pricing import (
-    bs_price, heston_price, merton_price, implied_vol, implied_vol_smile,
+    bs_price, bs_greeks, heston_price, merton_price, implied_vol, implied_vol_smile,
     qmc_european_price, mc_price, calibrate_heston,
+    heston_terminal_samples, merton_terminal_samples, american_exercise_boundary,
 )
 
 RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results")
@@ -157,6 +163,113 @@ def calibration_fit_plot():
     print("True parameters:", true)
 
 
+def return_distribution_plot():
+    """Terminal log-return densities under each model: the mechanism behind the
+    smile. Heston is left-skewed (rho<0); Merton has a sharp peak and fat tails."""
+    T = 1.0
+    heston_p = dict(v0=0.04, kappa=2.0, theta=0.04, sigma=0.6, rho=-0.7)
+    merton_p = dict(sigma=0.18, lam=0.7, muJ=-0.15, sigmaJ=0.2)
+
+    n = 400_000
+    bs_sigma = 0.2
+    z = np.random.default_rng(0).standard_normal(n)
+    bs_ret = (r - 0.5 * bs_sigma ** 2) * T + bs_sigma * np.sqrt(T) * z
+
+    heston_ST = heston_terminal_samples(S0, T, r, n_paths=n, n_steps=200, seed=1, **heston_p)
+    heston_ret = np.log(heston_ST / S0)
+    merton_ST = merton_terminal_samples(S0, T, r, n_paths=n, seed=2, **merton_p)
+    merton_ret = np.log(merton_ST / S0)
+
+    grid = np.linspace(-1.0, 0.7, 500)
+    plt.figure(figsize=(8, 4.8))
+    for ret, label in [(bs_ret, "Black-Scholes (Gaussian)"),
+                       (heston_ret, "Heston (stochastic vol)"),
+                       (merton_ret, "Merton (jump-diffusion)")]:
+        kde = gaussian_kde(ret)
+        plt.plot(grid, kde(grid), label=label)
+    plt.xlabel(r"Terminal log-return $\ln(S_T/S_0)$")
+    plt.ylabel("Density")
+    plt.title("Risk-Neutral Return Distributions (T = 1 year)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, "return_distributions.png"), dpi=150)
+    plt.close()
+
+
+def greeks_profile_plot():
+    spots = np.linspace(60, 140, 100)
+    K, T, sigma = 100.0, 1.0, 0.2
+
+    call = [bs_greeks(s, K, T, r, sigma, "call") for s in spots]
+    put = [bs_greeks(s, K, T, r, sigma, "put") for s in spots]
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    axes[0].plot(spots, [g["delta"] for g in call], label="Call")
+    axes[0].plot(spots, [g["delta"] for g in put], label="Put")
+    axes[0].set_title("Delta")
+    axes[0].legend()
+    axes[1].plot(spots, [g["gamma"] for g in call])
+    axes[1].set_title("Gamma (call = put)")
+    axes[2].plot(spots, [g["vega"] for g in call])
+    axes[2].set_title("Vega (call = put)")
+    for ax in axes:
+        ax.axvline(K, color="grey", lw=0.8, alpha=0.6)
+        ax.set_xlabel("Spot price")
+    fig.suptitle("Black-Scholes Greeks vs Spot (K = 100, T = 1, sigma = 20%)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, "greeks_profiles.png"), dpi=150)
+    plt.close()
+
+
+def exercise_boundary_plot():
+    K, T, sigma = 100.0, 1.0, 0.2
+    times, boundary = american_exercise_boundary(S0, K, T, r, sigma, n_steps=600, option_type="put")
+
+    plt.figure(figsize=(7.5, 4.8))
+    plt.plot(times, boundary, label="Exercise boundary $S^*(t)$")
+    plt.axhline(K, color="grey", ls="--", lw=1, label="Strike $K$")
+    plt.fill_between(times, 0, boundary, alpha=0.15, label="Exercise region")
+    plt.ylim(boundary[~np.isnan(boundary)].min() - 5, K + 5)
+    plt.xlabel("Time $t$ (years)")
+    plt.ylabel("Spot price")
+    plt.title("American Put: Optimal Early-Exercise Boundary")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, "exercise_boundary.png"), dpi=150)
+    plt.close()
+
+
+def smile_sensitivity_plot():
+    strikes = np.linspace(75, 125, 25)
+    T = 1.0
+    base = dict(v0=0.04, kappa=2.0, theta=0.04, sigma=0.5, rho=-0.5)
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.6), sharey=True)
+    for rho in [-0.9, -0.5, 0.0, 0.5]:
+        p = {**base, "rho": rho}
+        iv = implied_vol_smile(lambda K: heston_price(S0, K, T, r, option_type="call", **p),
+                               S0, strikes, T, r, option_type="call")
+        axes[0].plot(strikes, iv * 100, marker=".", ms=4, label=fr"$\rho={rho}$")
+    axes[0].set_title(r"Effect of correlation $\rho$ (skew)")
+    axes[0].set_xlabel("Strike")
+    axes[0].set_ylabel("Implied vol (%)")
+    axes[0].legend()
+
+    for xi in [0.1, 0.3, 0.6, 0.9]:
+        p = {**base, "sigma": xi}
+        iv = implied_vol_smile(lambda K: heston_price(S0, K, T, r, option_type="call", **p),
+                               S0, strikes, T, r, option_type="call")
+        axes[1].plot(strikes, iv * 100, marker=".", ms=4, label=fr"$\xi={xi}$")
+    axes[1].set_title(r"Effect of vol-of-vol $\xi$ (convexity)")
+    axes[1].set_xlabel("Strike")
+    axes[1].legend()
+
+    fig.suptitle("Heston Smile Sensitivity to Parameters")
+    plt.tight_layout()
+    plt.savefig(os.path.join(RESULTS_DIR, "smile_sensitivity.png"), dpi=150)
+    plt.close()
+
+
 if __name__ == "__main__":
     print("Generating volatility smile...")
     vol_smile_plot()
@@ -164,6 +277,14 @@ if __name__ == "__main__":
     heston_surface_plot()
     print("Generating QMC convergence...")
     qmc_convergence_plot()
+    print("Generating return distributions...")
+    return_distribution_plot()
+    print("Generating Greeks profiles...")
+    greeks_profile_plot()
+    print("Generating exercise boundary...")
+    exercise_boundary_plot()
+    print("Generating smile sensitivity...")
+    smile_sensitivity_plot()
     print("Generating calibration fit...")
     calibration_fit_plot()
     print(f"\nFigures saved to {RESULTS_DIR}")
